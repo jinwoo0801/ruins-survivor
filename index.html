@@ -125,7 +125,7 @@
     <div class="gbtn skill s1" id="btnS1"><span class="ico">✴</span>표창<div class="cd"></div></div>
     <div class="gbtn skill s2" id="btnS2"><span class="ico">✷</span>암흑<div class="cd"></div></div>
     <div class="gbtn skill s3" id="btnS3"><span class="ico">»</span>은신<div class="cd"></div></div>
-    <div class="gbtn atk" id="btnAtk">단검</div>
+    <div class="gbtn atk" id="btnAtk">참격</div>
   </div>
 
   <!-- 시작 -->
@@ -136,7 +136,7 @@
     <div class="best" id="bestLine"></div>
     <div class="skills-help">
       <b>이동</b> : 조이스틱 / <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> · <span class="kbd">←↑↓→</span> (8방향)<br>
-      <b>단검 난무</b> : <span class="kbd">Space</span>/<span class="kbd">J</span> · 전방 근접 베기<br>
+      <b>참격(카타나)</b> : <span class="kbd">Space</span>/<span class="kbd">J</span> · 전방 검격<br>
       <b>✴ 표창 투척</b> <span class="kbd">1</span>/<span class="kbd">K</span> · 관통 원거리<br>
       <b>✷ 암흑 폭발</b> <span class="kbd">2</span>/<span class="kbd">L</span> · 광역 + 넉백<br>
       <b>» 은신 질주</b> <span class="kbd">3</span>/<span class="kbd">;</span> · 무적 대시<br>
@@ -620,23 +620,59 @@
   }
   function drawAssassin(cx,cy,ang,ghost){
     const flash=!ghost&&player.hitFlash>0;
+    const G=(c)=>ghost?'rgba(120,255,220,0.55)':(flash?COL.hit:c);
     // 그림자
-    if(!ghost){ ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(cx,cy+15,16,7,0,0,6.28); ctx.fill(); }
+    if(!ghost){ ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(cx,cy+16,17,7,0,0,6.28); ctx.fill(); }
     ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang);
-    const bob=Math.sin(player.anim)*1.5;
-    // 망토
-    ctx.fillStyle=flash?COL.hit:(ghost?COL.s3:COL.cloak); ctx.strokeStyle='#0d0a16'; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(-15,-12+bob); ctx.quadraticCurveTo(-22,0,-13,14); ctx.lineTo(12,13);
-    ctx.quadraticCurveTo(20,0,15,-11); ctx.quadraticCurveTo(0,-19,-15,-12+bob); ctx.closePath(); ctx.fill(); ctx.stroke();
-    // 후드(전방)
-    ctx.fillStyle=flash?COL.hit:(ghost?COL.s3:COL.hood);
-    ctx.beginPath(); ctx.moveTo(17,0); ctx.lineTo(2,-10); ctx.lineTo(2,10); ctx.closePath(); ctx.fill();
-    if(!ghost){ // 붉은 눈
-      ctx.fillStyle=COL.eye; ctx.fillRect(7,-4,3,3); ctx.fillRect(7,2,3,3); }
-    // 이중 단검
-    ctx.strokeStyle=ghost?COL.s3:COL.blade; ctx.lineWidth=2.6; ctx.lineCap='round';
-    const sw=player.attackTimer>0?20:9;
-    ctx.beginPath(); ctx.moveTo(3,-9); ctx.lineTo(3+sw,-14); ctx.moveTo(3,9); ctx.lineTo(3+sw,14); ctx.stroke();
+
+    // --- 카타나(오른손, 뒤쪽 레이어) ---
+    ctx.save(); ctx.rotate(-0.55+(player.attackTimer>0?0.95:0));
+    ctx.strokeStyle=ghost?'rgba(120,255,220,0.55)':'#22222a'; ctx.lineWidth=3.4; ctx.lineCap='round'; // 손잡이
+    ctx.beginPath(); ctx.moveTo(6,11); ctx.lineTo(13,13); ctx.stroke();
+    ctx.strokeStyle=ghost?'rgba(120,255,220,0.55)':'#33343c'; ctx.lineWidth=5; // 코등이
+    ctx.beginPath(); ctx.moveTo(13,10); ctx.lineTo(13,16); ctx.stroke();
+    ctx.strokeStyle=ghost?'rgba(150,255,230,0.7)':'#dbe0e6'; ctx.lineWidth=2.6; // 검신
+    ctx.beginPath(); ctx.moveTo(14,13); ctx.lineTo(46,17); ctx.stroke();
+    ctx.restore();
+
+    // --- 하의(네이비, 뒤) / 상체(회색 셔츠) ---
+    ctx.fillStyle=G('#2c3350');
+    ctx.beginPath(); ctx.ellipse(-4,0,15,13,0,0,6.28); ctx.fill();
+    ctx.fillStyle=G('#c7cacc'); ctx.strokeStyle=ghost?'rgba(0,0,0,0)':'#3a3d40'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.ellipse(2,0,13,12,0,0,6.28); ctx.fill(); ctx.stroke();
+    // 소매(어깨)
+    ctx.fillStyle=G('#b7babc');
+    ctx.beginPath(); ctx.ellipse(1,-12,6,5,0,0,6.28); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(1,12,6,5,0,0,6.28); ctx.fill();
+
+    // --- 보라 밧줄 벨트 ---
+    ctx.strokeStyle=ghost?'rgba(120,255,220,0.4)':'#8f7bb0'; ctx.lineWidth=4; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(-7,-11); ctx.quadraticCurveTo(-11,0,-7,11); ctx.stroke();
+    ctx.fillStyle=ghost?'rgba(120,255,220,0.4)':'#a48fc9'; ctx.beginPath(); ctx.arc(-9,0,4,0,6.28); ctx.fill();
+
+    // --- 회색 하이칼라(머리 뒤) ---
+    ctx.fillStyle=G('#d2d5d7');
+    ctx.beginPath(); ctx.moveTo(-1,-11); ctx.lineTo(-13,-7); ctx.lineTo(-13,7); ctx.lineTo(-1,11); ctx.closePath(); ctx.fill();
+
+    // --- 검은 스파이크 헤어(탑다운) ---
+    const hx=5,hy=0;
+    ctx.fillStyle=ghost?'rgba(120,255,220,0.6)':'#15151f';
+    const n=11;
+    for(let i=0;i<n;i++){ const a=i/n*6.283+0.12;
+      const len=8+(Math.cos(a)<0?8:1.5)+(i%2?2.5:0); // 뒤통수 쪽 스파이크가 길게
+      const a1=a-0.26,a2=a+0.26;
+      ctx.beginPath();
+      ctx.moveTo(hx+Math.cos(a1)*4.5, hy+Math.sin(a1)*4.5);
+      ctx.lineTo(hx+Math.cos(a)*len, hy+Math.sin(a)*len);
+      ctx.lineTo(hx+Math.cos(a2)*4.5, hy+Math.sin(a2)*4.5);
+      ctx.closePath(); ctx.fill(); }
+    ctx.beginPath(); ctx.arc(hx,hy,7.5,0,6.28); ctx.fill();       // 정수리
+
+    // --- 얼굴 + 붉은 눈(앞쪽) ---
+    if(!ghost){
+      ctx.fillStyle='#f0c9a8'; ctx.beginPath(); ctx.arc(hx+6,hy,5.5,-1.1,1.1); ctx.fill();
+      ctx.fillStyle=COL.eye; ctx.fillRect(hx+7,hy-4,3,2.6); ctx.fillRect(hx+7,hy+1.4,3,2.6);
+    }
     ctx.restore();
     if(!ghost && player.god){ ctx.strokeStyle='#ffd84d'; ctx.lineWidth=2; ctx.globalAlpha=0.6;
       ctx.beginPath(); ctx.arc(cx,cy,30,0,6.28); ctx.stroke(); ctx.globalAlpha=1; }
