@@ -125,6 +125,7 @@
     <div class="tab" data-tab="skill"><span class="ti">📜</span>스킬</div>
     <div class="tab" data-tab="element"><span class="ti">🔮</span>속성</div>
     <div class="tab" data-tab="rebirth"><span class="ti">✦</span>전직</div>
+    <div class="tab" data-tab="settings"><span class="ti">⚙️</span>설정</div>
   </div>
 
   <!-- 패널 -->
@@ -206,6 +207,26 @@
       <div class="card">
         <h3>계승한 직업</h3>
         <div class="small" id="inheritList">아직 없음</div>
+      </div>
+    </div>
+
+    <!-- 설정 -->
+    <div class="panel" id="panel-settings">
+      <div class="card">
+        <h3>게임 정보</h3>
+        <div class="kv"><span>직업</span><b id="setCls">-</b></div>
+        <div class="kv"><span>전직</span><b id="setPrestige">0차</b></div>
+        <div class="kv"><span>최고 스테이지</span><b id="setBest">1</b></div>
+        <div class="kv"><span>보유 혼 / SP</span><b id="setSoulSp">0 / 0</b></div>
+      </div>
+      <div class="card">
+        <h3>데이터</h3>
+        <div class="small" style="margin-bottom:10px">진행 상황은 이 브라우저(기기)에 자동 저장됩니다. 아래 버튼으로 처음부터 다시 시작할 수 있어요. <b style="color:#ff6a4a">되돌릴 수 없습니다.</b></div>
+        <button class="ubtn" id="resetBtn" style="justify-content:center;border-color:#7a2b2b;background:#3a1a1a"><span>⚠ 처음부터 하기</span></button>
+      </div>
+      <div class="card">
+        <h3>도움말</h3>
+        <div class="small">· 전투는 <b style="color:#c9a8ff">완전 자동</b>입니다. 강해지면 스테이지가 오르고, 벽에 막히면 <b style="color:#c9a8ff">전직</b>으로 환생해 더 강해지세요.<br>· 스킬은 자동 시전되며 <b style="color:#c9a8ff">스킬 탭</b>에서 SP로 강화합니다.<br>· 앱을 꺼도 방치 보상(최대 8시간)이 쌓입니다.</div>
       </div>
     </div>
   </div>
@@ -596,6 +617,7 @@
       $('perm'+cap(p.k)).disabled=S.soul<permCost(p.k); }
     dom.inheritList.innerHTML=S.played.length? S.played.map(cl=>`${CLASSES[cl].ico} ${cl} — <span style="color:#c9a8ff">${CLASSES[cl].passive}</span>`).join('<br>') : '아직 없음';
     const sb=$('spBal'); if(sb)sb.textContent=S.sp||0;
+    refreshSettings();
   }
   const cap=s=>s[0].toUpperCase()+s.slice(1);
 
@@ -709,7 +731,21 @@
     t.classList.add('active'); $('panel-'+t.dataset.tab).classList.add('active');
     if(t.dataset.tab==='element')buildElGrid();
     if(t.dataset.tab==='skill')refreshSkills();
+    if(t.dataset.tab==='settings')refreshSettings();
   });
+  function refreshSettings(){ if(!$('setCls')||!S)return;
+    $('setCls').textContent=(CLASSES[S.className]?.ico||'')+' '+S.className;
+    $('setPrestige').textContent=S.prestige+'차';
+    $('setBest').textContent=S.bestStage;
+    $('setSoulSp').textContent=fmt(S.soul)+' / '+(S.sp||0);
+  }
+  let resetArmed=false, resetTimer=null;
+  $('resetBtn').onclick=function(){ const span=this.querySelector('span');
+    if(!resetArmed){ resetArmed=true; span.textContent='⚠ 정말 초기화하려면 한 번 더 탭';
+      resetTimer=setTimeout(()=>{ resetArmed=false; span.textContent='⚠ 처음부터 하기'; },3500); return; }
+    clearTimeout(resetTimer); try{localStorage.removeItem(SAVE_KEY);}catch(e){}
+    S=null; try{location.reload();}catch(e){ openClassSelect(false); }
+  };
   $('buyWeapon').onclick=()=>{ (S.buyMax?function(){while(buyWeapon());}:buyWeapon)(); refreshPanels(); };
   $('buyArmor').onclick=()=>{ (S.buyMax?function(){while(buyArmor());}:buyArmor)(); refreshPanels(); };
   $('autoForge').onclick=function(){ S.autoForge=!S.autoForge; this.classList.toggle('on',S.autoForge); this.textContent='⚙ 자동 강화 '+(S.autoForge?'ON':'OFF'); };
