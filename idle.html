@@ -122,6 +122,7 @@
   <div id="tabs">
     <div class="tab active" data-tab="hunt"><span class="ti">⚔️</span>사냥</div>
     <div class="tab" data-tab="forge"><span class="ti">🛠️</span>강화</div>
+    <div class="tab" data-tab="skill"><span class="ti">📜</span>스킬</div>
     <div class="tab" data-tab="element"><span class="ti">🔮</span>속성</div>
     <div class="tab" data-tab="rebirth"><span class="ti">✦</span>전직</div>
   </div>
@@ -161,6 +162,16 @@
         </div>
         <div class="small" style="margin-top:8px">자동 강화는 골드가 모이면 더 저렴한 장비를 알아서 강화합니다.</div>
       </div>
+    </div>
+
+    <!-- 스킬 -->
+    <div class="panel" id="panel-skill">
+      <div class="card">
+        <h3>스킬 포인트 <small>레벨업·보스 처치로 획득</small></h3>
+        <div class="kv"><span>보유 SP</span><b id="spBal">0</b></div>
+        <div class="small">스킬은 전투 중 <b style="color:#c9a8ff">자동 시전</b>됩니다. 전직하면 지나온 직업의 스킬이 함께 발동해요.</div>
+      </div>
+      <div id="skillList"></div>
     </div>
 
     <!-- 속성 -->
@@ -255,6 +266,16 @@
     마법사:{col:'#6a7bd6',accent:'#a884ff',wpn:'staff'},
     성직자:{col:'#e8e2d0',accent:'#ffd84d',wpn:'mace'},
   };
+  // 스킬 (자동 시전) — 직업 스킬 + 전직 각성 궁극기
+  const CLASS_SKILL={전사:'warrior',도적:'rogue',무도가:'monk',마법사:'mage',성직자:'cleric'};
+  const SKILL_DEF={
+    warrior:{name:'파열 강타',ico:'💥',cd:4.0,dmgMul:3.2,hits:1,col:'#c94f4f'},
+    rogue:{name:'그림자 습격',ico:'🗡️',cd:3.2,dmgMul:1.6,hits:3,col:'#5fce8f'},
+    monk:{name:'백열 난타',ico:'👊',cd:3.6,dmgMul:0.95,hits:6,col:'#ff8c3c'},
+    mage:{name:'인페르노',ico:'🔥',cd:5.0,dmgMul:5.5,hits:1,col:'#a884ff'},
+    cleric:{name:'천벌',ico:'⚡',cd:4.5,dmgMul:3.0,hits:1,heal:0.22,col:'#ffd84d'},
+    ult:{name:'각성 · 파멸',ico:'☠️',cd:8.0,dmgMul:6.0,hits:2,col:'#ff2b6a',ultimate:true},
+  };
 
   // ===== 상태 =====
   const SAVE_KEY='lod_idle_v1';
@@ -265,6 +286,7 @@
       gold:0, weaponLv:0, armorLv:0,
       stage:1, killsInStage:0, bestStage:1,
       soul:0, perm:{atk:0,hp:0,gold:0,xp:0,elem:0}, prestige:0,
+      sp:0, skills:{}, mastered:[],
       played:[], owned:[], equipped:null,
       autoForge:true, buyMax:false,
       lastTime:Date.now(), gpsEMA:0, xpsEMA:0 };
@@ -304,7 +326,7 @@
 
   // ===== 전투 런타임 =====
   const hero={hp:100, atkTimer:0, lunge:0, hurt:0, down:0};
-  let mon=null, respawn=0, shake=0, hitstop=0, tGlobal=0;
+  let mon=null, respawn=0, shake=0, hitstop=0, tGlobal=0, skillCd={};
   const dmgNums=[], sparks=[], fx=[], pops=[], motes=[];
   function initMotes(){ motes.length=0; for(let i=0;i<26;i++)motes.push({x:Math.random(),y:Math.random(),s:0.4+Math.random()*0.9,r:1+Math.random()*2,ph:Math.random()*6.28}); }
   function startMonster(){ const stage=S.stage, boss=(stage%5===0);
@@ -336,11 +358,38 @@
     for(let i=0;i<(boss?34:18);i++)sparks.push({x:0.7,y:0.42,vx:(Math.random()-0.5)*(boss?5:3.6),vy:-Math.random()*4-0.5,t:0,c:i%2?ec:(boss?'#ffd84d':'#fff')});
     pops.push({x:0.7,y:0.34,t:0,txt:'+'+fmt(g)+' 🪙'});
     fx.push({type:'ring',t:0,max:0.4,crit:true,big:true});
+    if(boss)S.sp=(S.sp||0)+3;
     if(S.killsInStage>=killsNeed(stage)){ S.stage++; S.killsInStage=0; if(S.stage>S.bestStage)S.bestStage=S.stage; }
     mon=null; respawn=0.28;
   }
+
+  // ===== 스킬 =====
+  function unlockedSkills(){ const ids=[]; const seen={};
+    const add=id=>{ if(id&&!seen[id]){seen[id]=1;ids.push(id);} };
+    for(const id of (S.mastered||[]))add(id);   // 계승 스킬
+    add(CLASS_SKILL[S.className]);               // 현재 직업 스킬
+    if(S.prestige>=1)add('ult');                 // 각성 궁극기
+    return ids; }
+  function ensureSkills(){ if(!S.skills)S.skills={}; for(const id of unlockedSkills())if(!S.skills[id])S.skills[id]=1; }
+  function skillMul(id){ const def=SKILL_DEF[id], lv=S.skills[id]||1;
+    let mul=def.dmgMul*(1+0.16*(lv-1)); if(def.ultimate)mul+=S.prestige*2; return mul; }
+  function castSkill(id){
+    if(!mon||mon.dead)return; const def=SKILL_DEF[id];
+    const em=elemMul(), crit=Math.random()<D.crit+0.1;
+    const total=D.atk*skillMul(id)*em*(crit?D.critDmg:1);
+    mon.hp-=total; mon.hurt=0.18; mon.kx=(def.ultimate?36:22); hero.lunge=0.2;
+    if(def.heal)hero.hp=Math.min(D.maxHp,hero.hp+D.maxHp*def.heal);
+    shake=Math.min(20,shake+(def.ultimate?15:8)); hitstop=Math.max(hitstop,def.ultimate?0.11:0.07);
+    fx.push({type:'skill',t:0,max:0.5,col:def.col,ult:def.ultimate});
+    pops.push({x:0.5,y:0.19,t:0,txt:def.ico+' '+def.name+(def.heal?' ✚':''),col:def.col,big:true});
+    const hits=def.hits||1;
+    for(let i=0;i<hits;i++)dmgNums.push({x:0.66+(Math.random()-0.5)*0.16,y:0.36+(Math.random()-0.3)*0.1,v:Math.round(total/hits),t:0,crit,skill:def.col});
+    for(let i=0;i<(def.ultimate?26:16);i++)sparks.push({x:0.7,y:0.42,vx:(Math.random()-0.5)*(def.ultimate?5.5:4.2),vy:-Math.random()*4-0.5,t:0,c:i%2?def.col:'#fff'});
+    if(mon.hp<=0)killMonster();
+  }
+  function upgradeSkill(id){ const lv=S.skills[id]||1; if((S.sp||0)<lv)return; S.sp-=lv; S.skills[id]++; refreshSkills(); }
   function gainXp(a){ S.xp+=a;
-    while(S.xp>=xpNeed(S.level)){ S.xp-=xpNeed(S.level); S.level++;
+    while(S.xp>=xpNeed(S.level)){ S.xp-=xpNeed(S.level); S.level++; S.sp=(S.sp||0)+1;
       const w=CLASSES[S.className].w; for(const k in w)S.stats[k]+=w[k];
       recompute(); hero.hp=D.maxHp; }
   }
@@ -359,7 +408,10 @@
       else if(!mon.dead){
         if(mon.spawn<1)mon.spawn=Math.min(1,mon.spawn+dt*4);
         if(mon.kx)mon.kx*=0.82;
-        hero.atkTimer-=dt; if(hero.atkTimer<=0){ hero.atkTimer=D.atkInterval; heroAttack(); }
+        // 스킬 자동 시전
+        for(const id of unlockedSkills()){ skillCd[id]=(skillCd[id]||0)-dt;
+          if(skillCd[id]<=0){ skillCd[id]=SKILL_DEF[id].cd; if(mon&&!mon.dead)castSkill(id); } }
+        if(mon&&!mon.dead){ hero.atkTimer-=dt; if(hero.atkTimer<=0){ hero.atkTimer=D.atkInterval; heroAttack(); } }
         if(mon&&!mon.dead){
           mon.atkTimer-=dt; if(mon.atkTimer<=0){ mon.atkTimer=1.2; hero.hp-=mon.atk; hero.hurt=0.2; shake=Math.min(14,shake+5);
             for(let i=0;i<5;i++)sparks.push({x:0.28,y:0.5,vx:(Math.random()-0.8)*2.4,vy:-Math.random()*2.2,t:0,c:'#ff4d6a'});
@@ -463,19 +515,26 @@
       if(e.type==='slash'){ ctx.save(); ctx.translate(hx+40+(1-p)*8,gy-27); ctx.globalAlpha=1-p; ctx.strokeStyle=e.crit?'#ffd84d':'#fff'; ctx.lineWidth=e.crit?6:4; ctx.lineCap='round';
         ctx.beginPath(); ctx.arc(0,0,30,-1.1+p*1.5,0.9+p*1.5); ctx.stroke(); ctx.restore(); }
       if(e.type==='ring'){ ctx.save(); ctx.globalAlpha=(1-p)*0.9; ctx.strokeStyle=e.crit?'#ffd84d':(e.el?ec:'#fff'); ctx.lineWidth=e.big?5:3;
-        ctx.beginPath(); ctx.arc(mx,gy-26,(e.big?48:26)*p+6,0,6.28); ctx.stroke(); ctx.restore(); } }
+        ctx.beginPath(); ctx.arc(mx,gy-26,(e.big?48:26)*p+6,0,6.28); ctx.stroke(); ctx.restore(); }
+      if(e.type==='skill'){ ctx.save(); ctx.globalAlpha=1-p; ctx.strokeStyle=e.col; ctx.lineWidth=e.ult?7:5;
+        ctx.beginPath(); ctx.arc(mx,gy-26,(e.ult?72:50)*p+8,0,6.28); ctx.stroke();
+        ctx.globalAlpha=(1-p)*0.55; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(mx,gy-26,(e.ult?72:50)*p*0.62+4,0,6.28); ctx.stroke();
+        if(e.ult){ ctx.globalAlpha=(1-p)*0.4; ctx.fillStyle=e.col; ctx.beginPath(); ctx.arc(mx,gy-26,(72)*p+8,0,6.28); ctx.fill(); }
+        ctx.restore(); } }
     ctx.globalAlpha=1;
     // 스파크
     for(const s of sparks){ ctx.globalAlpha=Math.max(0,1-s.t/0.65); ctx.fillStyle=s.c; const z=2+(1-s.t)*2.5; ctx.fillRect(s.x*CW,s.y*CH,z,z); }
     ctx.globalAlpha=1; ctx.textAlign='center'; ctx.textBaseline='middle';
     // 데미지
     for(const d of dmgNums){ const a=Math.max(0,1-d.t/0.85), pop=d.t<0.1?(1+(0.1-d.t)*7):1;
-      ctx.globalAlpha=a; ctx.font='900 '+((d.crit?24:16)*pop).toFixed(0)+'px "Trebuchet MS"'; ctx.fillStyle=d.crit?'#ffd84d':'#fff';
+      ctx.globalAlpha=a; const big=d.skill||d.crit; ctx.font='900 '+((big?24:16)*pop).toFixed(0)+'px "Trebuchet MS"';
+      ctx.fillStyle=d.skill?d.skill:(d.crit?'#ffd84d':'#fff');
       ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,0.7)'; const X=d.x*CW,Y=d.y*CH;
       ctx.strokeText((d.crit?'⚡':'')+fmt(d.v),X,Y); ctx.fillText((d.crit?'⚡':'')+fmt(d.v),X,Y); }
-    // 골드 팝
-    for(const pp of pops){ const a=Math.max(0,1-pp.t/1.1); ctx.globalAlpha=a; ctx.font='900 15px "Trebuchet MS"'; ctx.fillStyle='#ffd84d';
-      ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,0.7)'; ctx.strokeText(pp.txt,pp.x*CW,pp.y*CH); ctx.fillText(pp.txt,pp.x*CW,pp.y*CH); }
+    // 골드 / 스킬 팝
+    for(const pp of pops){ const a=Math.max(0,1-pp.t/1.1); ctx.globalAlpha=a; ctx.font='900 '+(pp.big?18:15)+'px "Trebuchet MS"';
+      ctx.fillStyle=pp.col||'#ffd84d'; ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,0.75)';
+      ctx.strokeText(pp.txt,pp.x*CW,pp.y*CH); ctx.fillText(pp.txt,pp.x*CW,pp.y*CH); }
     ctx.globalAlpha=1;
     // 비네트
     const vg=ctx.createRadialGradient(CW/2,CH*0.5,CH*0.18,CW/2,CH*0.5,CH*0.82);
@@ -536,8 +595,28 @@
       $('perm'+cap(p.k)+'Val').textContent=lv*p.per; $('perm'+cap(p.k)+'Cost').textContent=fmt(permCost(p.k))+'혼';
       $('perm'+cap(p.k)).disabled=S.soul<permCost(p.k); }
     dom.inheritList.innerHTML=S.played.length? S.played.map(cl=>`${CLASSES[cl].ico} ${cl} — <span style="color:#c9a8ff">${CLASSES[cl].passive}</span>`).join('<br>') : '아직 없음';
+    const sb=$('spBal'); if(sb)sb.textContent=S.sp||0;
   }
   const cap=s=>s[0].toUpperCase()+s.slice(1);
+
+  function refreshSkills(){
+    const wrap=$('skillList'); if(!wrap)return; ensureSkills();
+    $('spBal').textContent=S.sp||0;
+    wrap.innerHTML='';
+    for(const id of unlockedSkills()){ const def=SKILL_DEF[id], lv=S.skills[id]||1, cost=lv, mul=skillMul(id);
+      const d=document.createElement('div'); d.className='card';
+      d.innerHTML=`<h3>${def.ico} ${def.name} ${def.ultimate?'<small style="color:#ff2b6a">각성</small>':''}<small>Lv.${lv}</small></h3>`+
+        `<div class="kv"><span>피해</span><b>${Math.round(mul*100)}% ATK${def.hits>1?' ×'+def.hits:''}</b></div>`+
+        `<div class="kv"><span>쿨다운</span><b>${def.cd}s</b></div>`+
+        (def.heal?`<div class="kv"><span>회복</span><b>최대 HP ${Math.round(def.heal*100)}%</b></div>`:'')+
+        `<button class="ubtn buy" data-sk="${id}"><span>강화 → Lv.${lv+1}</span><span class="cost">${cost} SP</span></button>`;
+      wrap.appendChild(d);
+    }
+    wrap.querySelectorAll('button[data-sk]').forEach(b=>{ const id=b.dataset.sk, lv=S.skills[id]||1;
+      b.disabled=(S.sp||0)<lv; b.onclick=()=>upgradeSkill(id); });
+    if(S.prestige<1){ const n=document.createElement('div'); n.className='small'; n.style.padding='4px 2px';
+      n.innerHTML='✦ <b style="color:#c9a8ff">전직(환생)</b> 시 지금 직업의 스킬을 영구 계승하고, 강력한 「각성 · 파멸」 궁극기가 해방됩니다.'; wrap.appendChild(n); }
+  }
 
   // ===== 강화 =====
   const weaponCost=()=>Math.ceil(15*Math.pow(1.15,S.weaponLv));
@@ -570,17 +649,20 @@
   const permCost=k=>Math.ceil((S.perm[k]+1)*(k==='elem'?2:1));
   function buyPerm(k){ if(S.soul<permCost(k))return; S.soul-=permCost(k); S.perm[k]++; recompute(); refreshPanels(); }
   function doRebirth(){ const gain=soulGain(S.stage); if(gain<=0)return;
-    S.soul+=gain; if(!S.played.includes(S.className))S.played.push(S.className); S.prestige++;
+    S.soul+=gain; if(!S.played.includes(S.className))S.played.push(S.className);
+    const sk=CLASS_SKILL[S.className]; if(sk&&!S.mastered.includes(sk))S.mastered.push(sk);
+    S.prestige++;
     openClassSelect(true);
   }
 
   // ===== 저장 / 로드 =====
-  function save(){ S.lastTime=Date.now(); try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){} }
+  function save(){ if(!S)return; S.lastTime=Date.now(); try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){} }
   function load(){ try{ const raw=localStorage.getItem(SAVE_KEY); if(!raw)return false; S=JSON.parse(raw);
     // 방어적 병합
     S.perm=Object.assign({atk:0,hp:0,gold:0,xp:0,elem:0},S.perm||{});
     S.stats=Object.assign({STR:5,DEX:5,INT:5,WIS:5,CON:5},S.stats||{});
-    S.played=S.played||[]; S.owned=S.owned||[]; return true; }catch(e){return false;} }
+    S.played=S.played||[]; S.owned=S.owned||[];
+    S.sp=S.sp||0; S.skills=S.skills||{}; S.mastered=S.mastered||[]; return true; }catch(e){return false;} }
 
   function offlineReward(){
     const dt=Math.min(8*3600,(Date.now()-(S.lastTime||Date.now()))/1000);
@@ -608,13 +690,14 @@
   }
   function pickClass(name){
     if(rebirthMode){
-      // 유지: soul, perm, prestige, played, owned, equipped, best
+      // 유지: soul, perm, prestige, played, 스킬 계승(skills/mastered/sp), owned, equipped, best
       const keep={soul:S.soul,perm:S.perm,prestige:S.prestige,played:S.played,owned:S.owned,equipped:S.equipped,bestStage:S.bestStage,
-        autoForge:S.autoForge,buyMax:S.buyMax,gpsEMA:0,xpsEMA:0};
+        skills:S.skills,mastered:S.mastered,sp:S.sp, autoForge:S.autoForge,buyMax:S.buyMax,gpsEMA:0,xpsEMA:0};
       S=Object.assign(freshState(name),keep);
     } else {
       if(!S) S=freshState(name); else { const keep={bestStage:S.bestStage}; S=Object.assign(freshState(name),keep); }
     }
+    skillCd={}; ensureSkills();
     recompute(); hero.hp=D.maxHp; mon=null; startMonster();
     $('classScreen').classList.add('hidden'); buildElGrid(); save();
   }
@@ -625,6 +708,7 @@
     document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
     t.classList.add('active'); $('panel-'+t.dataset.tab).classList.add('active');
     if(t.dataset.tab==='element')buildElGrid();
+    if(t.dataset.tab==='skill')refreshSkills();
   });
   $('buyWeapon').onclick=()=>{ (S.buyMax?function(){while(buyWeapon());}:buyWeapon)(); refreshPanels(); };
   $('buyArmor').onclick=()=>{ (S.buyMax?function(){while(buyArmor());}:buyArmor)(); refreshPanels(); };
@@ -640,7 +724,7 @@
   // ===== 부트 =====
   function boot(){
     resize(); initMotes();
-    if(load()){ recompute(); hero.hp=D.maxHp; startMonster();
+    if(load()){ recompute(); ensureSkills(); hero.hp=D.maxHp; startMonster();
       $('classScreen').classList.add('hidden');
       $('autoForge').classList.toggle('on',S.autoForge); $('autoForge').textContent='⚙ 자동 강화 '+(S.autoForge?'ON':'OFF');
       $('buyMax').classList.toggle('on',S.buyMax); buildElGrid(); offlineReward();
