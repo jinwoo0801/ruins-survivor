@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>어둠의 방치록</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0a0812;color:#e7e0f2;
+    font-family:'Trebuchet MS','Malgun Gothic','Segoe UI',system-ui,sans-serif;user-select:none;-webkit-user-select:none;}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;max-width:520px;margin:0 auto;}
+
+  /* 상단 HUD */
+  #hud{padding:10px 12px 6px;background:linear-gradient(180deg,#150f24,#0d0a16);border-bottom:1px solid #2a2044;}
+  .row{display:flex;align-items:center;gap:8px;}
+  .space{justify-content:space-between;}
+  .cls{font-weight:900;font-size:15px;color:#ffd84d;}
+  .cls .ico{font-size:18px;}
+  .lv{font-size:12px;color:#c9a8ff;font-weight:800;}
+  .mapname{font-size:12px;color:#a99fc6;}
+  .elbadge{font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);}
+  .bar{position:relative;height:14px;border-radius:8px;background:rgba(20,18,34,0.7);overflow:hidden;border:1px solid rgba(255,255,255,0.12);margin-top:5px;}
+  .bar>span{position:absolute;left:0;top:0;height:100%;transition:width .12s;}
+  .bar>em{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-style:normal;color:#fff;text-shadow:0 1px 2px #000;}
+  .hp>span{background:linear-gradient(90deg,#3fae52,#63d67a);}
+  .xp>span{background:linear-gradient(90deg,#7a4fe0,#a884ff);}
+  .stg{font-size:13px;font-weight:900;color:#fff;}
+  .gold{font-size:13px;font-weight:900;color:#ffd84d;}
+  .dps{font-size:10px;color:#8f86ab;}
+
+  /* 전투 화면 */
+  #sceneWrap{flex:1;position:relative;min-height:150px;}
+  #scene{display:block;width:100%;height:100%;}
+  #statusLine{position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:11px;color:#c9a8ff;pointer-events:none;text-shadow:0 1px 3px #000;}
+
+  /* 탭 */
+  #tabs{display:flex;background:#0d0a16;border-top:1px solid #2a2044;}
+  .tab{flex:1;padding:9px 4px;text-align:center;font-size:12px;font-weight:800;color:#8f86ab;cursor:pointer;border-top:2px solid transparent;}
+  .tab.active{color:#ffd84d;border-top-color:#ffd84d;background:rgba(255,216,77,0.06);}
+  .tab .ti{display:block;font-size:17px;margin-bottom:1px;}
+
+  /* 패널 */
+  #panels{height:40vh;max-height:340px;overflow-y:auto;background:#0b0813;padding:12px;border-top:1px solid #1c1730;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .card{background:linear-gradient(180deg,#181226,#110d1c);border:1px solid #2a2044;border-radius:12px;padding:11px 12px;margin-bottom:10px;}
+  .card h3{font-size:13px;color:#c9a8ff;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+  .card h3 small{color:#8f86ab;font-weight:700;font-size:11px;}
+  .kv{display:flex;justify-content:space-between;font-size:12px;color:#b3aac6;margin:4px 0;}
+  .kv b{color:#fff;font-variant-numeric:tabular-nums;}
+  .ubtn{display:flex;justify-content:space-between;align-items:center;width:100%;padding:10px 12px;margin-top:8px;
+    border:1px solid #3a2f5c;border-radius:10px;background:#211a38;color:#fff;font-weight:800;font-size:13px;cursor:pointer;}
+  .ubtn:active{transform:scale(0.98);}
+  .ubtn:disabled{opacity:0.4;cursor:default;}
+  .ubtn .cost{font-size:12px;color:#ffd84d;font-weight:800;}
+  .ubtn.buy{background:linear-gradient(180deg,#2e2352,#211a38);}
+  .toggle{padding:8px 12px;border-radius:10px;border:1px solid #3a2f5c;background:#211a38;color:#b3aac6;font-weight:800;font-size:12px;cursor:pointer;}
+  .toggle.on{background:#5b2e9e;border-color:#a06eff;color:#fff;}
+  .small{font-size:11px;color:#8f86ab;line-height:1.6;}
+
+  /* 속성 그리드 */
+  .elgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .elcell{border:1px solid #2a2044;border-radius:10px;padding:9px 6px;text-align:center;cursor:pointer;background:#151022;}
+  .elcell .eln{font-size:12px;font-weight:800;margin-top:3px;}
+  .elcell .els{font-size:10px;color:#8f86ab;margin-top:2px;}
+  .elcell.owned{border-color:#4a3f6c;}
+  .elcell.equipped{border-color:#ffd84d;box-shadow:0 0 12px rgba(255,216,77,0.4);}
+  .elcell .eic{font-size:22px;}
+
+  /* 오버레이 / 모달 */
+  .overlay{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;text-align:center;background:rgba(8,6,15,0.82);backdrop-filter:blur(3px);padding:20px;}
+  .overlay.hidden{display:none;}
+  .otitle{font-size:clamp(26px,7vw,40px);font-weight:900;color:#fff;letter-spacing:2px;text-shadow:0 3px 0 #6a2bd6,0 6px 20px rgba(150,60,255,0.5);}
+  .osub{font-size:13px;color:#a99fc6;max-width:90%;line-height:1.6;}
+  .clsgrid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:420px;}
+  .clscard{width:120px;padding:12px 8px;border-radius:14px;background:linear-gradient(180deg,#1c1530,#120e1e);
+    border:2px solid #38315a;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:transform .08s,border-color .1s;}
+  .clscard:active{transform:scale(0.96);}
+  .clscard:hover{border-color:#ffd84d;}
+  .clscard .ci{font-size:30px;}
+  .clscard .cn{font-size:15px;font-weight:900;color:#fff;}
+  .clscard .cd{font-size:10px;color:#a99fc6;line-height:1.35;min-height:26px;}
+  .clscard .cp{font-size:10px;color:#c9a8ff;font-weight:800;}
+  .btn{padding:13px 40px;font-size:17px;font-weight:800;letter-spacing:1px;color:#0d0917;background:#ffd84d;border:none;
+    border-radius:999px;cursor:pointer;box-shadow:0 5px 0 #c9a417;}
+  .btn:active{transform:translateY(3px);box-shadow:0 2px 0 #c9a417;}
+  .rewardbox{background:rgba(255,255,255,0.05);border:1px solid #2a2044;border-radius:14px;padding:16px 22px;font-size:14px;line-height:2;}
+  .rewardbox b{color:#ffd84d;}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 상단 HUD -->
+  <div id="hud">
+    <div class="row space">
+      <div class="cls"><span class="ico" id="hClsIco">⚔️</span> <span id="hCls">전사</span> <span class="lv" id="hLv">Lv.1</span></div>
+      <div class="row" style="gap:6px">
+        <span class="mapname" id="hMap">안개 늪지</span>
+        <span class="elbadge" id="hMapEl">💧 수</span>
+      </div>
+    </div>
+    <div class="bar hp"><span id="hpBar" style="width:100%"></span><em id="hpTxt">100/100</em></div>
+    <div class="bar xp"><span id="xpBar" style="width:0%"></span><em id="xpTxt">EXP</em></div>
+    <div class="row space" style="margin-top:6px">
+      <div class="stg">⚑ <span id="hStage">1</span> 스테이지 <span class="dps" id="hKills"></span></div>
+      <div class="gold">🪙 <span id="hGold">0</span></div>
+    </div>
+    <div class="row space" style="margin-top:2px">
+      <div class="dps" id="hElemLine">내 속성: 무 · 배율 x1.0</div>
+      <div class="dps" id="hDps">DPS ~0</div>
+    </div>
+  </div>
+
+  <!-- 전투 -->
+  <div id="sceneWrap">
+    <canvas id="scene"></canvas>
+    <div id="statusLine"></div>
+  </div>
+
+  <!-- 탭 -->
+  <div id="tabs">
+    <div class="tab active" data-tab="hunt"><span class="ti">⚔️</span>사냥</div>
+    <div class="tab" data-tab="forge"><span class="ti">🛠️</span>강화</div>
+    <div class="tab" data-tab="element"><span class="ti">🔮</span>속성</div>
+    <div class="tab" data-tab="rebirth"><span class="ti">✦</span>전직</div>
+  </div>
+
+  <!-- 패널 -->
+  <div id="panels">
+    <!-- 사냥/상태 -->
+    <div class="panel active" id="panel-hunt">
+      <div class="card">
+        <h3>능력치 <small id="statMain"></small></h3>
+        <div class="kv"><span>공격력</span><b id="sAtk">0</b></div>
+        <div class="kv"><span>최대 체력</span><b id="sHp">0</b></div>
+        <div class="kv"><span>초당 회복</span><b id="sRegen">0</b></div>
+        <div class="kv"><span>치명타</span><b id="sCrit">0%</b></div>
+        <div class="kv"><span>공격 속도</span><b id="sAspd">0</b></div>
+      </div>
+      <div class="card">
+        <h3>특성치</h3>
+        <div class="kv"><span>STR 힘</span><b id="tSTR">5</b></div>
+        <div class="kv"><span>DEX 민첩</span><b id="tDEX">5</b></div>
+        <div class="kv"><span>INT 지능</span><b id="tINT">5</b></div>
+        <div class="kv"><span>WIS 지혜</span><b id="tWIS">5</b></div>
+        <div class="kv"><span>CON 체력</span><b id="tCON">5</b></div>
+        <div class="small">레벨업 시 직업에 맞춰 자동 분배됩니다.</div>
+      </div>
+    </div>
+
+    <!-- 강화 -->
+    <div class="panel" id="panel-forge">
+      <div class="card">
+        <h3>장비 강화 <small id="autoState"></small></h3>
+        <button class="ubtn buy" id="buyWeapon"><span>🗡️ 무기 <span id="wLv">+0</span> · 공격 <span id="wAtk"></span></span><span class="cost" id="wCost">0</span></button>
+        <button class="ubtn buy" id="buyArmor"><span>🛡️ 방어구 <span id="aLv">+0</span> · 체력 <span id="aHp"></span></span><span class="cost" id="aCost">0</span></button>
+        <div class="row" style="gap:8px;margin-top:10px">
+          <button class="toggle on" id="autoForge" style="flex:1">⚙ 자동 강화 ON</button>
+          <button class="toggle" id="buyMax" style="flex:1">한번에 최대</button>
+        </div>
+        <div class="small" style="margin-top:8px">자동 강화는 골드가 모이면 더 저렴한 장비를 알아서 강화합니다.</div>
+      </div>
+    </div>
+
+    <!-- 속성 -->
+    <div class="panel" id="panel-element">
+      <div class="card">
+        <h3>속성 상성 <small>상성 우위 시 피해 증가</small></h3>
+        <div class="kv"><span>현재 지역</span><b id="eMap">안개 늪지 (수)</b></div>
+        <div class="kv"><span>내 속성</span><b id="eMine">무속성</b></div>
+        <div class="kv"><span>피해 배율</span><b id="eMul">x1.0</b></div>
+        <div class="small" style="margin:6px 0 10px">수→화→풍→토→수 순으로 상성 우위. 빛 ↔ 어둠은 서로 강함. 목걸이를 구매하면 그 속성으로 싸울 수 있습니다.</div>
+        <div class="elgrid" id="elGrid"></div>
+      </div>
+    </div>
+
+    <!-- 전직/프레스티지 -->
+    <div class="panel" id="panel-rebirth">
+      <div class="card">
+        <h3>전직 (환생) <small id="rbCount">0차</small></h3>
+        <div class="small" style="margin-bottom:8px">전직하면 레벨·장비가 초기화되지만, 도달 스테이지에 비례해 <b style="color:#a884ff">혼(魂)</b>을 얻고 지나온 직업의 힘을 <b style="color:#a884ff">영구 계승</b>합니다.</div>
+        <div class="kv"><span>보유 혼</span><b id="rbSoul">0</b></div>
+        <div class="kv"><span>지금 전직 시 획득</span><b id="rbGain">0</b></div>
+        <button class="ubtn" id="doRebirth" style="justify-content:center"><span>✦ 전직하기</span></button>
+      </div>
+      <div class="card">
+        <h3>혼의 계승 (영구 강화)</h3>
+        <button class="ubtn" id="permAtk"><span>⚔️ 공격 강화 <span id="permAtkLv">Lv.0</span> (+<span id="permAtkVal">0</span>%)</span><span class="cost" id="permAtkCost">1혼</span></button>
+        <button class="ubtn" id="permHp"><span>❤️ 체력 강화 <span id="permHpLv">Lv.0</span> (+<span id="permHpVal">0</span>%)</span><span class="cost" id="permHpCost">1혼</span></button>
+        <button class="ubtn" id="permGold"><span>🪙 골드 획득 <span id="permGoldLv">Lv.0</span> (+<span id="permGoldVal">0</span>%)</span><span class="cost" id="permGoldCost">1혼</span></button>
+        <button class="ubtn" id="permXp"><span>📖 경험치 <span id="permXpLv">Lv.0</span> (+<span id="permXpVal">0</span>%)</span><span class="cost" id="permXpCost">1혼</span></button>
+        <button class="ubtn" id="permElem"><span>🔮 속성 위력 <span id="permElemLv">Lv.0</span> (+<span id="permElemVal">0</span>%)</span><span class="cost" id="permElemCost">1혼</span></button>
+      </div>
+      <div class="card">
+        <h3>계승한 직업</h3>
+        <div class="small" id="inheritList">아직 없음</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 직업 선택 -->
+<div class="overlay" id="classScreen">
+  <div class="otitle">어둠의 방치록</div>
+  <div class="osub">넥슨 「어둠의전설」에서 영감을 받은 방치형 성장 RPG.<br>직업을 선택해 자동 사냥으로 강해지고, 전직으로 환생하라.</div>
+  <div class="clsgrid" id="classGrid"></div>
+  <div class="osub" id="classPickHint" style="color:#ffd84d">직업을 선택하세요</div>
+</div>
+
+<!-- 방치 보상 -->
+<div class="overlay hidden" id="offlineScreen">
+  <div class="otitle" style="font-size:28px">방치 보상</div>
+  <div class="osub" id="offlineTime"></div>
+  <div class="rewardbox" id="offlineReward"></div>
+  <button class="btn" id="offlineClaim">받기</button>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $=id=>document.getElementById(id);
+  const canvas=$('scene'), ctx=canvas.getContext('2d');
+  let CW=0,CH=0,DPR=1;
+  function resize(){ DPR=Math.min(devicePixelRatio||1,2); const r=canvas.getBoundingClientRect();
+    CW=r.width; CH=r.height; canvas.width=Math.floor(CW*DPR); canvas.height=Math.floor(CH*DPR); ctx.setTransform(DPR,0,0,DPR,0,0); }
+
+  // ===== 데이터 =====
+  const EL={ 수:{ico:'💧',col:'#4aa3ff'}, 토:{ico:'⛰️',col:'#b98a4a'}, 풍:{ico:'🌪️',col:'#5fce8f'},
+    화:{ico:'🔥',col:'#ff6a4a'}, 빛:{ico:'✨',col:'#ffd84d'}, 어둠:{ico:'🌑',col:'#a06eff'} };
+  const BEATS={ 수:'화', 화:'풍', 풍:'토', 토:'수', 빛:'어둠', 어둠:'빛' };
+  const ELEM_ORDER=['수','토','풍','화','빛','어둠'];
+  const MAPS=[ {n:'안개 늪지',el:'수'}, {n:'무너진 성채',el:'토'}, {n:'바람의 고원',el:'풍'},
+    {n:'용암 동굴',el:'화'}, {n:'빛의 성소',el:'빛'}, {n:'어둠의 심연',el:'어둠'} ];
+  const mapFor=stage=>MAPS[Math.floor((stage-1)/5)%MAPS.length];
+
+  const CLASSES={
+    전사:{ico:'⚔️',atkStat:'STR',w:{STR:3,CON:2,DEX:1,INT:0,WIS:1},atkMul:1.05,hpMul:1.35,crit:0.03,critDmg:1.5,regenMul:1.0,
+      desc:'최고의 방어력과 생존력',passive:'체력 +3%',inh:{hp:1.03}},
+    도적:{ico:'🗡️',atkStat:'DEX',w:{DEX:3,STR:1,CON:1,INT:0,WIS:1},atkMul:1.0,hpMul:1.0,crit:0.15,critDmg:2.0,regenMul:1.0,
+      desc:'크리티컬 특화 딜러',passive:'치명타 +3%',inh:{crit:0.03}},
+    무도가:{ico:'👊',atkStat:'CON',w:{STR:2,DEX:2,CON:2,INT:1,WIS:1},atkMul:1.0,hpMul:1.15,crit:0.08,critDmg:1.7,regenMul:1.6,
+      desc:'만능 하이브리드',passive:'공격·체력 +2%',inh:{atk:1.02,hp:1.02}},
+    마법사:{ico:'🔮',atkStat:'INT',w:{INT:3,WIS:1,CON:1,STR:0,DEX:0},atkMul:1.35,hpMul:0.85,crit:0.05,critDmg:1.6,regenMul:1.0,
+      desc:'강력한 마법 딜러',passive:'공격 +3%',inh:{atk:1.03}},
+    성직자:{ico:'✝️',atkStat:'WIS',w:{WIS:3,CON:2,INT:1,STR:0,DEX:0},atkMul:0.85,hpMul:1.15,crit:0.05,critDmg:1.5,regenMul:3.0,
+      desc:'뛰어난 회복력',passive:'회복 +50%',inh:{regen:1.5}},
+  };
+  const PERM=[ {k:'atk',per:5}, {k:'hp',per:5}, {k:'gold',per:5}, {k:'xp',per:5}, {k:'elem',per:10} ];
+
+  // ===== 상태 =====
+  const SAVE_KEY='lod_idle_v1';
+  let S=null;
+  function freshState(cls){
+    return { className:cls, level:1, xp:0,
+      stats:{STR:5,DEX:5,INT:5,WIS:5,CON:5},
+      gold:0, weaponLv:0, armorLv:0,
+      stage:1, killsInStage:0, bestStage:1,
+      soul:0, perm:{atk:0,hp:0,gold:0,xp:0,elem:0}, prestige:0,
+      played:[], owned:[], equipped:null,
+      autoForge:true, buyMax:false,
+      lastTime:Date.now(), gpsEMA:0, xpsEMA:0 };
+  }
+
+  // ===== 파생 스탯 =====
+  let D={};
+  function recompute(){
+    const c=CLASSES[S.className];
+    // 계승 배율
+    let inhAtk=1,inhHp=1,inhCrit=0,inhRegen=1;
+    for(const cl of S.played){ const t=CLASSES[cl]?.inh||{};
+      if(t.atk)inhAtk*=t.atk; if(t.hp)inhHp*=t.hp; if(t.crit)inhCrit+=t.crit; if(t.regen)inhRegen*=t.regen; }
+    const permAtk=1+0.05*S.perm.atk, permHp=1+0.05*S.perm.hp;
+    const atkStatVal=S.stats[c.atkStat], con=S.stats.CON, wis=S.stats.WIS;
+    D.atk=(5 + S.weaponLv*3 + atkStatVal*1.4) * c.atkMul * inhAtk * permAtk;
+    D.maxHp=(60 + S.armorLv*20 + con*7) * c.hpMul * inhHp * permHp;
+    D.regen=(D.maxHp*0.012 + wis*0.6) * c.regenMul * inhRegen;
+    D.crit=Math.min(0.75, c.crit + inhCrit);
+    D.critDmg=c.critDmg;
+    D.atkInterval=0.9;
+    D.goldMul=1+0.05*S.perm.gold;
+    D.xpMul=1+0.05*S.perm.xp;
+    D.advMul=1.5+0.10*S.perm.elem;
+    D.ico=c.ico;
+  }
+  function elemMul(){ const h=S.equipped, m=mapFor(S.stage).el;
+    if(!h) return 1; if(BEATS[h]===m) return D.advMul; if(BEATS[m]===h) return 0.7; return 1; }
+  const xpNeed=lvl=>Math.floor(20*Math.pow(1.25,lvl-1));
+  const soulGain=stage=>Math.floor(Math.pow(Math.max(0,stage-4)/6,1.35));
+
+  function monHp(stage,boss){ return 14*Math.pow(1.17,stage-1)*(boss?8:1); }
+  function monAtk(stage,boss){ return 3*Math.pow(1.14,stage-1)*(boss?1.6:1); }
+  function goldKill(stage,boss){ return 6*Math.pow(1.16,stage-1)*(boss?5:1)*D.goldMul; }
+  function xpKill(stage,boss){ return 7*Math.pow(1.13,stage-1)*(boss?5:1)*D.xpMul; }
+  const killsNeed=stage=>(stage%5===0?1:(stage<4?6:10));
+
+  // ===== 전투 런타임 =====
+  const hero={hp:100, atkTimer:0, lunge:0, hurt:0, down:0};
+  let mon=null, respawn=0; const dmgNums=[], sparks=[];
+  function startMonster(){ const stage=S.stage, boss=(stage%5===0);
+    mon={ boss, maxHp:monHp(stage,boss), hp:monHp(stage,boss), atk:monAtk(stage,boss), atkTimer:1.2, hurt:0, x:0, spawn:0, dead:false }; }
+
+  function heroAttack(){
+    if(!mon||mon.dead)return;
+    const crit=Math.random()<D.crit;
+    let dmg=D.atk*elemMul()*(0.9+Math.random()*0.2)*(crit?D.critDmg:1);
+    mon.hp-=dmg; mon.hurt=0.12; hero.lunge=0.16;
+    dmgNums.push({x:0.68,y:0.4,v:Math.round(dmg),t:0,crit,mine:true});
+    for(let i=0;i<(crit?7:4);i++)sparks.push({x:0.68,y:0.45,vx:(Math.random()-0.2)*2,vy:-Math.random()*2-0.5,t:0,c:crit?'#ffd84d':'#fff'});
+    if(mon.hp<=0)killMonster();
+  }
+  function killMonster(){
+    if(mon.dead)return; mon.dead=true;
+    const boss=mon.boss, stage=S.stage;
+    const g=goldKill(stage,boss), x=xpKill(stage,boss);
+    S.gold+=g; gainXp(x);
+    S.gpsEMA=S.gpsEMA*0.95+ (g/ (D.atkInterval))*0.05;   // 대략적 초당 골드
+    S.xpsEMA=S.xpsEMA*0.95+ (x/ (D.atkInterval))*0.05;
+    S.killsInStage++;
+    for(let i=0;i<14;i++)sparks.push({x:0.68,y:0.45,vx:(Math.random()-0.5)*3,vy:-Math.random()*3-0.5,t:0,c:boss?'#ffd84d':'#a884ff'});
+    if(S.killsInStage>=killsNeed(stage)){ S.stage++; S.killsInStage=0; if(S.stage>S.bestStage)S.bestStage=S.stage; }
+    mon=null; respawn=0.26;
+  }
+  function gainXp(a){ S.xp+=a;
+    while(S.xp>=xpNeed(S.level)){ S.xp-=xpNeed(S.level); S.level++;
+      const w=CLASSES[S.className].w; for(const k in w)S.stats[k]+=w[k];
+      recompute(); hero.hp=D.maxHp; }
+  }
+
+  // ===== 업데이트 =====
+  let acc=0;
+  function tick(dt){
+    if(hero.lunge>0)hero.lunge-=dt; if(hero.hurt>0)hero.hurt-=dt;
+    if(hero.down>0){ hero.down-=dt; if(hero.down<=0){hero.hp=D.maxHp;} }
+    else {
+      hero.hp=Math.min(D.maxHp,hero.hp+D.regen*dt);
+      if(!mon){ if(respawn>0)respawn-=dt; else startMonster(); }
+      else if(!mon.dead){
+        if(mon.spawn<1)mon.spawn=Math.min(1,mon.spawn+dt*4);
+        hero.atkTimer-=dt; if(hero.atkTimer<=0){ hero.atkTimer=D.atkInterval; heroAttack(); }
+        if(mon&&!mon.dead){
+          mon.atkTimer-=dt; if(mon.atkTimer<=0){ mon.atkTimer=1.2; hero.hp-=mon.atk; hero.hurt=0.2;
+            for(let i=0;i<4;i++)sparks.push({x:0.3,y:0.45,vx:(Math.random()-0.8)*2,vy:-Math.random()*2,t:0,c:'#ff4d6a'});
+            if(hero.hp<=0){ hero.hp=0; hero.down=2.2; } }
+          if(mon.hurt>0)mon.hurt-=dt;
+        }
+      }
+    }
+    for(const d of dmgNums){d.t+=dt;d.y-=dt*0.12;} for(let i=dmgNums.length-1;i>=0;i--)if(dmgNums[i].t>0.8)dmgNums.splice(i,1);
+    for(const p of sparks){p.t+=dt;p.x+=p.vx*dt*0.12;p.y+=p.vy*dt*0.12;p.vy+=dt*4;} for(let i=sparks.length-1;i>=0;i--)if(sparks[i].t>0.6)sparks.splice(i,1);
+    // 자동 강화
+    if(S.autoForge)autoForgeStep();
+  }
+
+  // ===== 렌더 =====
+  function draw(){
+    const m=mapFor(S.stage), ec=EL[m.el].col;
+    const g=ctx.createLinearGradient(0,0,0,CH); g.addColorStop(0,shade(ec,-0.72)); g.addColorStop(1,'#0a0812');
+    ctx.fillStyle=g; ctx.fillRect(0,0,CW,CH);
+    // 지면
+    const gy=CH*0.72; ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(0,gy,CW,CH-gy);
+    ctx.strokeStyle=hex(ec,0.15); ctx.lineWidth=1;
+    for(let i=0;i<6;i++){ const y=gy+ (i/6)*(CH-gy); ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke(); }
+    // 원경 룬
+    ctx.fillStyle=hex(ec,0.08);
+    for(let i=0;i<5;i++){ const x=(i+0.5)/5*CW, h=30+((i*53)%40); ctx.fillRect(x-14,gy-h,28,h); }
+
+    const hx=CW*0.28, hy=gy, ico=D.ico;
+    // 그림자
+    ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.beginPath();ctx.ellipse(hx,hy+4,26,8,0,0,6.28);ctx.fill();
+    // 영웅
+    ctx.save(); ctx.translate(hx + (hero.lunge>0?18:0), hy - 26 + (hero.hurt>0?(Math.random()-0.5)*4:0));
+    ctx.font='40px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    if(hero.down>0)ctx.globalAlpha=0.4; ctx.fillText(ico,0,0); ctx.globalAlpha=1;
+    ctx.restore();
+    if(hero.down>0){ ctx.fillStyle='#ff6a4a'; ctx.font='900 12px "Trebuchet MS"'; ctx.textAlign='center';
+      ctx.fillText('부활 '+hero.down.toFixed(1)+'s',hx,hy-64); }
+
+    // 몬스터
+    if(mon){ const mx=CW*0.7, my=gy, sc=(mon.boss?1.5:1)*(0.5+mon.spawn*0.5);
+      ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.beginPath();ctx.ellipse(mx,my+4,26*sc,8*sc,0,0,6.28);ctx.fill();
+      ctx.save(); ctx.translate(mx,my-26*sc); ctx.scale(sc,sc);
+      if(mon.hurt>0){ ctx.translate((Math.random()-0.5)*4,0); }
+      // 마족 실루엣
+      ctx.fillStyle=mon.hurt>0?'#fff':hex(ec,1);
+      ctx.beginPath(); ctx.moveTo(0,-22); ctx.lineTo(18,-2); ctx.lineTo(14,18); ctx.lineTo(-14,18); ctx.lineTo(-18,-2); ctx.closePath(); ctx.fill();
+      // 뿔
+      ctx.strokeStyle=shade(ec,-0.3); ctx.lineWidth=3; ctx.beginPath();
+      ctx.moveTo(-8,-18);ctx.lineTo(-14,-30); ctx.moveTo(8,-18);ctx.lineTo(14,-30); ctx.stroke();
+      // 눈
+      ctx.fillStyle='#ff2b4a'; ctx.fillRect(-8,-6,5,4); ctx.fillRect(4,-6,5,4);
+      ctx.restore();
+      if(mon.boss){ ctx.fillStyle='#ffd84d'; ctx.font='900 11px "Trebuchet MS"'; ctx.textAlign='center'; ctx.fillText('★ BOSS',mx,my-26*sc-34); }
+      // 몬스터 체력바
+      const bw=70*sc,bx=mx-bw/2,by=my-26*sc-46, r=Math.max(0,mon.hp/mon.maxHp);
+      ctx.fillStyle='rgba(10,8,16,0.8)';ctx.fillRect(bx-1,by-1,bw+2,7);
+      ctx.fillStyle=r>0.5?'#63d67a':r>0.25?'#ffd84d':'#ff4d6a';ctx.fillRect(bx,by,bw*r,5);
+    }
+    // 스파크 / 데미지
+    for(const p of sparks){ ctx.globalAlpha=Math.max(0,1-p.t/0.6); ctx.fillStyle=p.c; ctx.fillRect(p.x*CW,p.y*CH,3,3); }
+    ctx.globalAlpha=1; ctx.textAlign='center';
+    for(const d of dmgNums){ const a=Math.max(0,1-d.t/0.8); ctx.globalAlpha=a;
+      ctx.font='900 '+(d.crit?22:16)+'px "Trebuchet MS"'; ctx.fillStyle=d.crit?'#ffd84d':'#fff';
+      ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,0.6)'; const X=d.x*CW,Y=d.y*CH;
+      ctx.strokeText(fmt(d.v),X,Y); ctx.fillText(fmt(d.v),X,Y); }
+    ctx.globalAlpha=1;
+  }
+  function hex(c,a){ const n=parseInt(c.slice(1),16),r=n>>16,g=(n>>8)&255,b=n&255; return `rgba(${r},${g},${b},${a})`; }
+  function shade(c,p){ const n=parseInt(c.slice(1),16); let r=n>>16,g=(n>>8)&255,b=n&255;
+    r=Math.round(r*(1+p));g=Math.round(g*(1+p));b=Math.round(b*(1+p));
+    const cl=v=>Math.max(0,Math.min(255,v)); return `rgb(${cl(r)},${cl(g)},${cl(b)})`; }
+
+  // ===== 숫자 포맷 =====
+  const UNITS=['','K','M','B','T','aa','ab','ac','ad','ae','af','ag'];
+  function fmt(n){ if(n<1000)return Math.floor(n).toString(); let u=0; while(n>=1000&&u<UNITS.length-1){n/=1000;u++;}
+    return (n<10?n.toFixed(2):n<100?n.toFixed(1):Math.floor(n))+UNITS[u]; }
+
+  // ===== UI 갱신 =====
+  const dom={};
+  ['hClsIco','hCls','hLv','hMap','hMapEl','hpBar','hpTxt','xpBar','xpTxt','hStage','hKills','hGold','hElemLine','hDps',
+   'statMain','sAtk','sHp','sRegen','sCrit','sAspd','tSTR','tDEX','tINT','tWIS','tCON','statusLine',
+   'wLv','wAtk','wCost','aLv','aHp','aCost','autoState','eMap','eMine','eMul','rbCount','rbSoul','rbGain','inheritList'
+  ].forEach(k=>dom[k]=$(k));
+
+  function refreshHUD(){
+    const c=CLASSES[S.className], m=mapFor(S.stage);
+    dom.hClsIco.textContent=c.ico; dom.hCls.textContent=S.className; dom.hLv.textContent='Lv.'+S.level;
+    dom.hMap.textContent=m.n; dom.hMapEl.textContent=EL[m.el].ico+' '+m.el; dom.hMapEl.style.color=EL[m.el].col;
+    dom.hpBar.style.width=(hero.hp/D.maxHp*100)+'%'; dom.hpTxt.textContent=fmt(hero.hp)+' / '+fmt(D.maxHp);
+    dom.xpBar.style.width=(S.xp/xpNeed(S.level)*100)+'%'; dom.xpTxt.textContent='EXP '+fmt(S.xp)+' / '+fmt(xpNeed(S.level));
+    dom.hStage.textContent=S.stage; dom.hKills.textContent='('+S.killsInStage+'/'+killsNeed(S.stage)+')';
+    dom.hGold.textContent=fmt(S.gold);
+    const em=elemMul(); dom.hElemLine.textContent='내 속성: '+(S.equipped?S.equipped:'무')+' · 배율 x'+em.toFixed(2);
+    dom.hElemLine.style.color=em>1?'#63d67a':em<1?'#ff6a4a':'#8f86ab';
+    dom.hDps.textContent='DPS ~'+fmt(D.atk*elemMul()*(1+D.crit*(D.critDmg-1))/D.atkInterval);
+    dom.statusLine.textContent=hero.down>0?'⚠ 쓰러졌다… 회복 후 재도전':(mon&&mon.boss?'★ 보스 교전 중':'자동 사냥 중…');
+  }
+  function refreshPanels(){
+    const c=CLASSES[S.className];
+    dom.statMain.textContent=S.className+' · 주스탯 '+c.atkStat;
+    dom.sAtk.textContent=fmt(D.atk); dom.sHp.textContent=fmt(D.maxHp); dom.sRegen.textContent=fmt(D.regen)+'/s';
+    dom.sCrit.textContent=Math.round(D.crit*100)+'% (x'+D.critDmg+')'; dom.sAspd.textContent=(1/D.atkInterval).toFixed(2)+'/s';
+    dom.tSTR.textContent=S.stats.STR; dom.tDEX.textContent=S.stats.DEX; dom.tINT.textContent=S.stats.INT;
+    dom.tWIS.textContent=S.stats.WIS; dom.tCON.textContent=S.stats.CON;
+    // 강화
+    dom.wLv.textContent='+'+S.weaponLv; dom.wAtk.textContent='+'+fmt(S.weaponLv*3+' ');
+    dom.aLv.textContent='+'+S.armorLv; dom.aHp.textContent='+'+fmt(S.armorLv*20+' ');
+    dom.wCost.textContent=fmt(weaponCost())+' 🪙'; dom.aCost.textContent=fmt(armorCost())+' 🪙';
+    $('buyWeapon').disabled=S.gold<weaponCost(); $('buyArmor').disabled=S.gold<armorCost();
+    dom.autoState.textContent=S.autoForge?'자동 ON':'수동';
+    // 속성
+    const m=mapFor(S.stage);
+    dom.eMap.textContent=m.n+' ('+m.el+')'; dom.eMine.textContent=S.equipped||'무속성';
+    const em=elemMul(); dom.eMul.textContent='x'+em.toFixed(2); dom.eMul.style.color=em>1?'#63d67a':em<1?'#ff6a4a':'#fff';
+    // 전직
+    dom.rbCount.textContent=S.prestige+'차'; dom.rbSoul.textContent=fmt(S.soul); dom.rbGain.textContent=fmt(soulGain(S.stage))+' 혼';
+    $('doRebirth').disabled=soulGain(S.stage)<=0;
+    for(const p of PERM){ const lv=S.perm[p.k]; $('perm'+cap(p.k)+'Lv').textContent='Lv.'+lv;
+      $('perm'+cap(p.k)+'Val').textContent=lv*p.per; $('perm'+cap(p.k)+'Cost').textContent=fmt(permCost(p.k))+'혼';
+      $('perm'+cap(p.k)).disabled=S.soul<permCost(p.k); }
+    dom.inheritList.innerHTML=S.played.length? S.played.map(cl=>`${CLASSES[cl].ico} ${cl} — <span style="color:#c9a8ff">${CLASSES[cl].passive}</span>`).join('<br>') : '아직 없음';
+  }
+  const cap=s=>s[0].toUpperCase()+s.slice(1);
+
+  // ===== 강화 =====
+  const weaponCost=()=>Math.ceil(15*Math.pow(1.15,S.weaponLv));
+  const armorCost=()=>Math.ceil(15*Math.pow(1.15,S.armorLv));
+  function buyWeapon(){ if(S.gold<weaponCost())return false; S.gold-=weaponCost(); S.weaponLv++; recompute(); return true; }
+  function buyArmor(){ if(S.gold<armorCost())return false; S.gold-=armorCost(); S.armorLv++; recompute(); return true; }
+  function autoForgeStep(){ let did=true,n=0;
+    while(did&&n<50){ did=false; const wc=weaponCost(),ac=armorCost();
+      if(wc<=ac){ if(S.gold>=wc){buyWeapon();did=true;} else if(S.gold>=ac){buyArmor();did=true;} }
+      else { if(S.gold>=ac){buyArmor();did=true;} else if(S.gold>=wc){buyWeapon();did=true;} }
+      n++; if(!S.buyMax)break; }
+  }
+
+  // ===== 속성 =====
+  const necklaceCost=()=>Math.ceil(600*Math.pow(3.2,S.owned.length));
+  function buildElGrid(){ const el=$('elGrid'); el.innerHTML='';
+    for(const e of ELEM_ORDER){ const owned=S.owned.includes(e), eq=S.equipped===e;
+      const d=document.createElement('div'); d.className='elcell'+(owned?' owned':'')+(eq?' equipped':'');
+      d.innerHTML=`<div class="eic">${EL[e].ico}</div><div class="eln" style="color:${EL[e].col}">${e}</div>`+
+        (owned?`<div class="els">${eq?'장착됨':'장착하기'}</div>`:`<div class="els">🪙 ${fmt(necklaceCostFor(e))}</div>`);
+      d.onclick=()=>{ if(owned){ S.equipped=eq?null:e; } else { const cost=necklaceCostFor(e); if(S.gold>=cost){S.gold-=cost;S.owned.push(e);S.equipped=e;} }
+        buildElGrid(); refreshPanels(); };
+      el.appendChild(d);
+    }
+  }
+  // 구매가는 보유 개수 기준(획득 순서 무관)
+  function necklaceCostFor(e){ return Math.ceil(600*Math.pow(3.2,S.owned.length)); }
+
+  // ===== 전직 (프레스티지) =====
+  const permCost=k=>Math.ceil((S.perm[k]+1)*(k==='elem'?2:1));
+  function buyPerm(k){ if(S.soul<permCost(k))return; S.soul-=permCost(k); S.perm[k]++; recompute(); refreshPanels(); }
+  function doRebirth(){ const gain=soulGain(S.stage); if(gain<=0)return;
+    S.soul+=gain; if(!S.played.includes(S.className))S.played.push(S.className); S.prestige++;
+    openClassSelect(true);
+  }
+
+  // ===== 저장 / 로드 =====
+  function save(){ S.lastTime=Date.now(); try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){} }
+  function load(){ try{ const raw=localStorage.getItem(SAVE_KEY); if(!raw)return false; S=JSON.parse(raw);
+    // 방어적 병합
+    S.perm=Object.assign({atk:0,hp:0,gold:0,xp:0,elem:0},S.perm||{});
+    S.stats=Object.assign({STR:5,DEX:5,INT:5,WIS:5,CON:5},S.stats||{});
+    S.played=S.played||[]; S.owned=S.owned||[]; return true; }catch(e){return false;} }
+
+  function offlineReward(){
+    const dt=Math.min(8*3600,(Date.now()-(S.lastTime||Date.now()))/1000);
+    if(dt<60||(S.gpsEMA<=0&&S.xpsEMA<=0))return;
+    const eff=0.5; const gold=S.gpsEMA*dt*eff, xp=S.xpsEMA*dt*eff;
+    S.gold+=gold; gainXp(xp);
+    const h=Math.floor(dt/3600),mn=Math.floor((dt%3600)/60);
+    $('offlineTime').textContent=`${h>0?h+'시간 ':''}${mn}분 동안 부하들이 사냥했습니다 (효율 50%)`;
+    $('offlineReward').innerHTML=`🪙 골드 <b>+${fmt(gold)}</b><br>📖 경험치 <b>+${fmt(xp)}</b>`;
+    $('offlineScreen').classList.remove('hidden');
+  }
+
+  // ===== 직업 선택 =====
+  let rebirthMode=false;
+  function openClassSelect(isRebirth){ rebirthMode=isRebirth;
+    const grid=$('classGrid'); grid.innerHTML='';
+    for(const name in CLASSES){ const c=CLASSES[name];
+      const d=document.createElement('div'); d.className='clscard';
+      d.innerHTML=`<div class="ci">${c.ico}</div><div class="cn">${name}</div><div class="cd">${c.desc}</div><div class="cp">${c.passive}</div>`;
+      d.onclick=()=>pickClass(name); grid.appendChild(d);
+    }
+    $('classPickHint').textContent=isRebirth?'전직할 직업을 선택하세요 (혼·계승·영구강화 유지)':'직업을 선택하세요';
+    document.querySelector('#classScreen .otitle').textContent=isRebirth?'전 직':'어둠의 방치록';
+    $('classScreen').classList.remove('hidden');
+  }
+  function pickClass(name){
+    if(rebirthMode){
+      // 유지: soul, perm, prestige, played, owned, equipped, best
+      const keep={soul:S.soul,perm:S.perm,prestige:S.prestige,played:S.played,owned:S.owned,equipped:S.equipped,bestStage:S.bestStage,
+        autoForge:S.autoForge,buyMax:S.buyMax,gpsEMA:0,xpsEMA:0};
+      S=Object.assign(freshState(name),keep);
+    } else {
+      if(!S) S=freshState(name); else { const keep={bestStage:S.bestStage}; S=Object.assign(freshState(name),keep); }
+    }
+    recompute(); hero.hp=D.maxHp; mon=null; startMonster();
+    $('classScreen').classList.add('hidden'); buildElGrid(); save();
+  }
+
+  // ===== 이벤트 =====
+  document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active'); $('panel-'+t.dataset.tab).classList.add('active');
+    if(t.dataset.tab==='element')buildElGrid();
+  });
+  $('buyWeapon').onclick=()=>{ (S.buyMax?function(){while(buyWeapon());}:buyWeapon)(); refreshPanels(); };
+  $('buyArmor').onclick=()=>{ (S.buyMax?function(){while(buyArmor());}:buyArmor)(); refreshPanels(); };
+  $('autoForge').onclick=function(){ S.autoForge=!S.autoForge; this.classList.toggle('on',S.autoForge); this.textContent='⚙ 자동 강화 '+(S.autoForge?'ON':'OFF'); };
+  $('buyMax').onclick=function(){ S.buyMax=!S.buyMax; this.classList.toggle('on',S.buyMax); };
+  for(const p of PERM)$('perm'+cap(p.k)).onclick=()=>buyPerm(p.k);
+  $('doRebirth').onclick=doRebirth;
+  $('offlineClaim').onclick=()=>$('offlineScreen').classList.add('hidden');
+  addEventListener('resize',resize);
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden)save(); });
+  addEventListener('beforeunload',save);
+
+  // ===== 부트 =====
+  function boot(){
+    resize();
+    if(load()){ recompute(); hero.hp=D.maxHp; startMonster();
+      $('autoForge').classList.toggle('on',S.autoForge); $('autoForge').textContent='⚙ 자동 강화 '+(S.autoForge?'ON':'OFF');
+      $('buyMax').classList.toggle('on',S.buyMax); buildElGrid(); offlineReward();
+    } else { openClassSelect(false); }
+    let last=performance.now();
+    function loop(now){ let f=(now-last)/1000; last=now; if(f>0.25)f=0.25;
+      if(S){ acc+=f; while(acc>=1/30){ tick(1/30); acc-=1/30; } draw(); refreshHUD(); if(now%600<20)refreshPanels(); }
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+    setInterval(()=>{ if(S){refreshPanels();save();} },3000);
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
